@@ -2,27 +2,29 @@
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
-<title>The Binding of Isaac - Mini Clone (HTML/JS)</title>
+<title>The Binding of Isaac - Versão Melhorada</title>
 <style>
-    body { margin:0; overflow:hidden; background:#111; color:#fff; font-family:Arial; }
+    body { margin:0; overflow:hidden; background:#000; font-family:Arial; }
     canvas { display:block; margin:0 auto; image-rendering: pixelated; }
     #ui {
-        position: absolute; top: 10px; left: 10px; z-index: 100;
-        background: rgba(0,0,0,0.6); padding: 10px 15px; border-radius: 8px;
+        position: absolute; top: 10px; left: 10px; color: white; z-index: 100;
+        background: rgba(0,0,0,0.7); padding: 12px 18px; border-radius: 10px; font-size: 18px;
     }
     #gameOver {
         position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-        background: rgba(0,0,0,0.9); padding: 30px; border-radius: 15px; text-align: center;
-        display: none; font-size: 32px;
+        background: rgba(20,0,0,0.95); color: #ff6666; padding: 40px; border-radius: 20px;
+        text-align: center; display: none; border: 4px solid #aa0000;
     }
+    button { padding: 12px 30px; font-size: 20px; background:#aa0000; color:white; border:none; border-radius:8px; cursor:pointer; }
+    button:hover { background:#ff0000; }
 </style>
 </head>
 <body>
 
 <div id="ui">
-    <strong>The Binding of Isaac</strong> - Mini Clone<br>
-    Vida: <span id="health">3</span> | Score: <span id="score">0</span><br>
-    WASD = mover | Mouse = mirar e atirar
+    <strong>THE BINDING OF ISAAC</strong><br>
+    Vida: ❤️ <span id="health">3</span> &nbsp;&nbsp; Score: <span id="score">0</span><br>
+    <small>WASD ou Setas = mover | Mouse ou Setas = atirar</small>
 </div>
 
 <canvas id="game" width="800" height="600"></canvas>
@@ -30,35 +32,28 @@
 <div id="gameOver">
     <h1>GAME OVER</h1>
     <p>Score final: <span id="finalScore">0</span></p>
-    <button onclick="location.reload()">Tentar novamente</button>
+    <button onclick="location.reload()">Jogar Novamente</button>
 </div>
 
 <script>
-// ====================== CONFIGURAÇÃO ======================
+// ====================== SETUP ======================
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 const W = 800, H = 600;
-canvas.width = W; canvas.height = H;
 
-let player = {
-    x: W/2, y: H/2,
-    size: 20,
-    speed: 4,
-    health: 3,
-    color: '#ffccaa'
-};
-
+let player = { x: W/2, y: H/2, size: 28, speed: 4.2, health: 3, invincible: 0 };
 let keys = {};
-let mouse = { x: W/2, y: H/2 };
+let mouse = { x: W/2, y: H/2, down: false };
 let bullets = [];
 let enemies = [];
 let particles = [];
 let score = 0;
 let gameRunning = true;
+let lastShot = 0;
 
 // ====================== INPUT ======================
 window.addEventListener('keydown', e => keys[e.key.toLowerCase()] = true);
-window.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
+window.addEventListener('keyup',   e => keys[e.key.toLowerCase()] = false);
 
 canvas.addEventListener('mousemove', e => {
     const rect = canvas.getBoundingClientRect();
@@ -66,144 +61,217 @@ canvas.addEventListener('mousemove', e => {
     mouse.y = e.clientY - rect.top;
 });
 
-canvas.addEventListener('mousedown', () => {
-    if (!gameRunning) return;
-    shoot();
-});
+canvas.addEventListener('mousedown', () => mouse.down = true);
+canvas.addEventListener('mouseup',   () => mouse.down = false);
 
-function shoot() {
-    const dx = mouse.x - player.x;
-    const dy = mouse.y - player.y;
-    const dist = Math.sqrt(dx*dx + dy*dy);
+// ====================== TIRO ======================
+function shoot(angle) {
+    const now = Date.now();
+    if (now - lastShot < 180) return; // taxa de tiro
+    
+    lastShot = now;
     
     bullets.push({
         x: player.x,
-        y: player.y,
-        vx: (dx / dist) * 10,
-        vy: (dy / dist) * 10,
-        size: 8,
-        life: 60
+        y: player.y - 8,
+        vx: Math.cos(angle) * 11,
+        vy: Math.sin(angle) * 11,
+        life: 45,
+        size: 9
     });
+    
+    // som de tiro visual
+    createParticles(player.x, player.y - 12, '#aaddff', 4);
 }
 
-// ====================== INIMIGOS ======================
-function spawnEnemy() {
-    if (enemies.length > 8) return;
-    
-    const side = Math.floor(Math.random()*4);
-    let ex, ey;
-    
-    if (side === 0) { ex = Math.random()*W; ey = -30; }
-    else if (side === 1) { ex = W+30; ey = Math.random()*H; }
-    else if (side === 2) { ex = Math.random()*W; ey = H+30; }
-    else { ex = -30; ey = Math.random()*H; }
-    
-    enemies.push({
-        x: ex, y: ey,
-        size: 22,
-        speed: 1.8 + Math.random()*0.8,
-        health: 2,
-        color: '#aa4444'
-    });
-}
-
-// ====================== PARTÍCULAS (sangue/lágrimas) ======================
+// ====================== PARTÍCULAS ======================
 function createParticles(x, y, color, count) {
     for (let i = 0; i < count; i++) {
+        const speed = 2 + Math.random() * 5;
         const angle = Math.random() * Math.PI * 2;
-        const speed = 1 + Math.random() * 4;
         particles.push({
             x, y,
             vx: Math.cos(angle) * speed,
             vy: Math.sin(angle) * speed,
-            life: 25 + Math.random()*15,
-            color
+            life: 20 + Math.random() * 25,
+            color,
+            size: 5 + Math.random() * 6
         });
     }
 }
 
-// ====================== LOOP PRINCIPAL ======================
-let lastSpawn = 0;
+// ====================== INIMIGOS ======================
+function spawnEnemy() {
+    if (enemies.length > 10) return;
+    
+    const angle = Math.random() * Math.PI * 2;
+    const dist = 350;
+    enemies.push({
+        x: player.x + Math.cos(angle) * dist,
+        y: player.y + Math.sin(angle) * dist,
+        size: 26,
+        speed: 1.6 + Math.random() * 0.7,
+        health: 3,
+        color: '#c22'
+    });
+}
+
+// ====================== LOOP ======================
+const clock = { last: Date.now() };
 
 function gameLoop() {
     if (!gameRunning) return;
     
-    ctx.fillStyle = '#2a2a2a';
+    const now = Date.now();
+    const delta = (now - clock.last) / 16;
+    clock.last = now;
+
+    // Fundo do porão
+    ctx.fillStyle = '#1a0f08';
     ctx.fillRect(0, 0, W, H);
     
+    // Chão com textura simples
+    ctx.fillStyle = '#3a2a1f';
+    for (let i = 0; i < 40; i++) {
+        ctx.fillRect((i*45)%W, (i*37)%H, 28, 28);
+    }
+
     // Movimento do jogador
-    if (keys['w'] && player.y > 30) player.y -= player.speed;
-    if (keys['s'] && player.y < H-30) player.y += player.speed;
-    if (keys['a'] && player.x > 30) player.x -= player.speed;
-    if (keys['d'] && player.x < W-30) player.x += player.speed;
+    let dx = 0, dy = 0;
+    if (keys['w'] || keys['arrowup'])    dy -= 1;
+    if (keys['s'] || keys['arrowdown'])  dy += 1;
+    if (keys['a'] || keys['arrowleft'])  dx -= 1;
+    if (keys['d'] || keys['arrowright']) dx += 1;
+
+    if (dx !== 0 || dy !== 0) {
+        const len = Math.hypot(dx, dy);
+        player.x += (dx / len) * player.speed;
+        player.y += (dy / len) * player.speed;
+    }
+
+    // Limites da tela
+    player.x = Math.max(30, Math.min(W-30, player.x));
+    player.y = Math.max(30, Math.min(H-30, player.y));
+
+    // === TIRO COM SETAS ===
+    if (keys['arrowup'])    shoot(-Math.PI/2);
+    if (keys['arrowdown'])  shoot( Math.PI/2);
+    if (keys['arrowleft'])  shoot( Math.PI);
+    if (keys['arrowright']) shoot( 0);
+
+    // Tiro com mouse
+    if (mouse.down) {
+        const dxm = mouse.x - player.x;
+        const dym = mouse.y - player.y;
+        const angle = Math.atan2(dym, dxm);
+        shoot(angle);
+    }
+
+    // Desenhar Isaac (melhor visual)
+    ctx.save();
+    ctx.translate(player.x, player.y);
     
-    // Desenhar jogador (Isaac simplificado)
-    ctx.fillStyle = player.color;
-    ctx.fillRect(player.x - player.size/2, player.y - player.size/2, player.size, player.size);
+    // Corpo
+    ctx.fillStyle = '#f4c8a8';
+    ctx.fillRect(-14, -10, 28, 26);
+    
+    // Cabeça
+    ctx.fillStyle = '#f4c8a8';
+    ctx.beginPath();
+    ctx.arc(0, -18, 14, 0, Math.PI*2);
+    ctx.fill();
+    
+    // Cabelo
+    ctx.fillStyle = '#4a2a1a';
+    ctx.beginPath();
+    ctx.ellipse(0, -24, 13, 8, 0, 0, Math.PI*2);
+    ctx.fill();
+    
+    // Olhos
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(-7, -21, 6, 7);
+    ctx.fillRect( 1, -21, 6, 7);
     ctx.fillStyle = '#000';
-    ctx.fillRect(player.x - 5, player.y - 5, 4, 4); // olho esquerdo
-    ctx.fillRect(player.x + 1, player.y - 5, 4, 4); // olho direito
+    ctx.fillRect(-5, -19, 3, 3);
+    ctx.fillRect( 3, -19, 3, 3);
     
-    // Balas
-    for (let i = bullets.length - 1; i >= 0; i--) {
+    ctx.restore();
+
+    // Balas (lágrimas com brilho)
+    for (let i = bullets.length-1; i >= 0; i--) {
         const b = bullets[i];
         b.x += b.vx;
         b.y += b.vy;
-        b.life--;
+        b.life -= 1;
+
+        const alpha = b.life / 45;
+        ctx.globalAlpha = alpha;
         
-        ctx.fillStyle = '#aaccff';
+        // Brilho
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.arc(b.x, b.y, b.size/2 + 2, 0, Math.PI*2);
+        ctx.fill();
+        
+        ctx.fillStyle = '#bbddff';
         ctx.beginPath();
         ctx.arc(b.x, b.y, b.size/2, 0, Math.PI*2);
         ctx.fill();
         
-        if (b.life <= 0 || b.x < 0 || b.x > W || b.y < 0 || b.y > H) {
+        ctx.globalAlpha = 1;
+
+        if (b.life <= 0 || b.x < -20 || b.x > W+20 || b.y < -20 || b.y > H+20) {
             bullets.splice(i, 1);
         }
     }
-    
+
     // Inimigos
-    for (let i = enemies.length - 1; i >= 0; i--) {
+    for (let i = enemies.length-1; i >= 0; i--) {
         const e = enemies[i];
         
-        // IA simples: vai na direção do jogador
         const dx = player.x - e.x;
         const dy = player.y - e.y;
-        const dist = Math.sqrt(dx*dx + dy*dy);
-        if (dist > 0) {
-            e.x += (dx / dist) * e.speed;
-            e.y += (dy / dist) * e.speed;
-        }
+        const dist = Math.hypot(dx, dy) || 1;
         
+        e.x += (dx / dist) * e.speed;
+        e.y += (dy / dist) * e.speed;
+
+        // Desenho do inimigo (monstro vermelho)
         ctx.fillStyle = e.color;
-        ctx.fillRect(e.x - e.size/2, e.y - e.size/2, e.size, e.size);
+        ctx.beginPath();
+        ctx.arc(e.x, e.y, e.size/2, 0, Math.PI*2);
+        ctx.fill();
         
+        // Olhos do inimigo
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(e.x-8, e.y-6, 6, 8);
+        ctx.fillRect(e.x+2, e.y-6, 6, 8);
+        ctx.fillStyle = '#000';
+        ctx.fillRect(e.x-6, e.y-4, 3, 4);
+        ctx.fillRect(e.x+4, e.y-4, 3, 4);
+
         // Colisão com balas
-        for (let j = bullets.length - 1; j >= 0; j--) {
+        for (let j = bullets.length-1; j >= 0; j--) {
             const b = bullets[j];
-            const dx2 = b.x - e.x;
-            const dy2 = b.y - e.y;
-            if (dx2*dx2 + dy2*dy2 < (e.size/2 + b.size/2)**2) {
+            if (Math.hypot(b.x - e.x, b.y - e.y) < e.size/2 + b.size/2) {
                 e.health--;
                 bullets.splice(j, 1);
-                createParticles(b.x, b.y, '#ff6666', 8);
+                createParticles(b.x, b.y, '#ffaaaa', 12);
                 
                 if (e.health <= 0) {
-                    createParticles(e.x, e.y, '#aa0000', 20);
+                    createParticles(e.x, e.y, '#aa0000', 35);
                     enemies.splice(i, 1);
-                    score += 10;
+                    score += 20;
                     break;
                 }
             }
         }
-        
+
         // Colisão com jogador
-        const pdx = player.x - e.x;
-        const pdy = player.y - e.y;
-        if (pdx*pdx + pdy*pdy < (player.size/2 + e.size/2)**2) {
+        if (player.invincible <= 0 && Math.hypot(player.x - e.x, player.y - e.y) < player.size/2 + e.size/2) {
             player.health--;
-            createParticles(player.x, player.y, '#ff0000', 15);
-            enemies.splice(i, 1);
-            
+            player.invincible = 60;
+            createParticles(player.x, player.y, '#ff0000', 25);
             document.getElementById('health').textContent = player.health;
             
             if (player.health <= 0) {
@@ -213,41 +281,40 @@ function gameLoop() {
             }
         }
     }
-    
-    // Spawn de inimigos
-    if (Date.now() - lastSpawn > 1200) {
-        spawnEnemy();
-        lastSpawn = Date.now();
-    }
-    
+
+    if (player.invincible > 0) player.invincible--;
+
+    // Spawn inimigos
+    if (Math.random() < 0.035) spawnEnemy();
+
     // Partículas
-    for (let i = particles.length - 1; i >= 0; i--) {
+    for (let i = particles.length-1; i >= 0; i--) {
         const p = particles[i];
         p.x += p.vx;
         p.y += p.vy;
         p.life--;
-        p.vx *= 0.95;
-        p.vy *= 0.95;
+        p.vx *= 0.96;
+        p.vy *= 0.96;
         
-        ctx.globalAlpha = p.life / 30;
+        ctx.globalAlpha = p.life / 40;
         ctx.fillStyle = p.color;
-        ctx.fillRect(p.x, p.y, 6, 6);
+        ctx.fillRect(p.x - p.size/2, p.y - p.size/2, p.size, p.size);
         
         if (p.life <= 0) particles.splice(i, 1);
     }
     ctx.globalAlpha = 1;
-    
-    // UI
+
+    // Atualiza UI
     document.getElementById('score').textContent = score;
-    
+
     requestAnimationFrame(gameLoop);
 }
 
-// Iniciar o jogo
-for (let i = 0; i < 3; i++) spawnEnemy();
+// Iniciar
+for (let i = 0; i < 4; i++) spawnEnemy();
 gameLoop();
 
-alert("The Binding of Isaac - Mini Clone\n\nWASD = mover\nMouse = mirar e atirar\n\nSobreviva o máximo possível!");
+alert("The Binding of Isaac - Versão Melhorada!\n\nWASD ou Setas = mover\nMouse ou Setas = atirar\n\nBoa sorte, Isaac! 💧");
 </script>
 </body>
 </html>
