@@ -1,204 +1,236 @@
 <!DOCTYPE html>
-<html lang="pt-br">
+<html lang="pt-BR">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cuphead - Jogo Simples com Boss</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            background-color: #87CEEB;
-            font-family: 'Arial', sans-serif;
-        }
-
-        .game-container {
-            position: relative;
-            width: 100vw;
-            height: 100vh;
-            overflow: hidden;
-            background-color: #87CEEB;
-        }
-
-        .player {
-            position: absolute;
-            bottom: 20px;
-            left: 50%;
-            width: 50px;
-            height: 50px;
-            background-color: red;
-            border-radius: 50%;
-            transform: translateX(-50%);
-        }
-
-        .enemy {
-            position: absolute;
-            top: 20px;
-            left: 50%;
-            width: 100px;
-            height: 100px;
-            background-color: green;
-            border-radius: 50%;
-            transform: translateX(-50%);
-            animation: moveEnemy 5s linear infinite;
-        }
-
-        @keyframes moveEnemy {
-            0% { top: 20px; left: 50%; }
-            50% { top: 80%; left: 30%; }
-            100% { top: 20px; left: 70%; }
-        }
-
-        .bullet {
-            position: absolute;
-            width: 10px;
-            height: 20px;
-            background-color: yellow;
-            border-radius: 5px;
-            transform: translateX(-50%);
-            display: none;
-        }
-
-        .enemy-bullet {
-            position: absolute;
-            width: 10px;
-            height: 20px;
-            background-color: black;
-            border-radius: 5px;
-            display: none;
-        }
-
-        .health-bar {
-            position: absolute;
-            top: 10px;
-            left: 10px;
-            width: 200px;
-            height: 20px;
-            background-color: gray;
-        }
-
-        .health {
-            height: 100%;
-            background-color: red;
-        }
-    </style>
+<meta charset="UTF-8">
+<title>Minecraft 3D - HTML/CSS/JS</title>
+<style>
+    body { margin:0; overflow:hidden; background:#000; font-family:Arial; }
+    #info {
+        position: absolute; top: 10px; left: 10px; color: white; z-index: 100;
+        background: rgba(0,0,0,0.5); padding: 10px; border-radius: 5px;
+    }
+    canvas { display: block; }
+</style>
 </head>
 <body>
-    <div class="game-container">
-        <div class="player" id="player"></div>
-        <div class="enemy" id="enemy"></div>
-        <div class="health-bar">
-            <div class="health" id="enemy-health"></div>
-        </div>
-    </div>
+<div id="info">
+    <strong>Minecraft 3D Simples</strong><br>
+    WASD = mover | Mouse = olhar | Espaço = pular<br>
+    Clique esquerdo = remover bloco | Clique direito = colocar bloco (grama)
+</div>
 
-    <script>
-        const player = document.getElementById("player");
-        const enemy = document.getElementById("enemy");
-        const enemyHealth = document.getElementById("enemy-health");
-        let playerPositionX = 50; // Percentual (0% a 100%)
-        let playerPositionY = 80; // Percentual (0% a 100%)
-        let playerSpeed = 5;
-        let isShooting = false;
-        let enemyLife = 100;
-        let bullets = [];
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r134/three.min.js"></script>
+<script>
+// ========================== CONFIGURAÇÃO BÁSICA ==========================
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x87ceeb); // céu azul
+scene.fog = new THREE.Fog(0x87ceeb, 50, 200);
 
-        // Controlando movimento do player
-        document.addEventListener("keydown", movePlayer);
-        document.addEventListener("keydown", shootBullet);
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = true;
+document.body.appendChild(renderer.domElement);
 
-        function movePlayer(event) {
-            if (event.key === "ArrowLeft" && playerPositionX > 0) {
-                playerPositionX -= playerSpeed;
-            } else if (event.key === "ArrowRight" && playerPositionX < 100) {
-                playerPositionX += playerSpeed;
-            } else if (event.key === "ArrowUp" && playerPositionY > 0) {
-                playerPositionY -= playerSpeed;
-            } else if (event.key === "ArrowDown" && playerPositionY < 100) {
-                playerPositionY += playerSpeed;
-            }
+// Iluminação
+const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+scene.add(ambientLight);
+const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+directionalLight.position.set(50, 100, 30);
+directionalLight.castShadow = true;
+scene.add(directionalLight);
 
-            updatePlayerPosition();
-        }
+// ========================== MUNDO VOXEL ==========================
+const blockSize = 1;
+const worldSize = 20; // mundo 20x20 blocos
+const worldHeight = 8;
 
-        function updatePlayerPosition() {
-            player.style.left = playerPositionX + "%";
-            player.style.bottom = playerPositionY + "%";
-        }
+const blocks = new Map(); // chave: "x,y,z" → mesh
 
-        // Função para atirar
-        function shootBullet(event) {
-            if (event.key === " ") { // Espaço para atirar
-                if (!isShooting) {
-                    isShooting = true;
-                    const bullet = document.createElement("div");
-                    bullet.classList.add("bullet");
-                    bullet.style.left = playerPositionX + "%";
-                    bullet.style.bottom = playerPositionY + 10 + "%";
-                    document.body.appendChild(bullet);
-                    bullets.push(bullet);
-                    moveBullet(bullet);
-                }
+const textures = {
+    grass: 0x00ff00,
+    dirt: 0x8b4513,
+    stone: 0x808080
+};
+
+// Gerar terreno simples (colinas)
+function generateWorld() {
+    for (let x = -worldSize; x < worldSize; x++) {
+        for (let z = -worldSize; z < worldSize; z++) {
+            const height = Math.floor(3 + Math.sin(x/5) * 2 + Math.cos(z/5) * 2);
+            
+            for (let y = 0; y < height; y++) {
+                let type = 'stone';
+                if (y === height - 1) type = 'grass';
+                else if (y >= height - 3) type = 'dirt';
+                
+                createBlock(x, y, z, type);
             }
         }
+    }
+}
 
-        function moveBullet(bullet) {
-            let bulletInterval = setInterval(() => {
-                bullet.style.bottom = parseFloat(bullet.style.bottom) + 5 + "%";
-                if (parseFloat(bullet.style.bottom) > 100) {
-                    clearInterval(bulletInterval);
-                    bullet.remove();
-                    isShooting = false;
-                } else {
-                    detectBulletHit(bullet);
-                }
-            }, 10);
+function createBlock(x, y, z, type) {
+    const geometry = new THREE.BoxGeometry(blockSize, blockSize, blockSize);
+    const material = new THREE.MeshLambertMaterial({ color: textures[type] });
+    const cube = new THREE.Mesh(geometry, material);
+    
+    cube.position.set(x * blockSize, y * blockSize, z * blockSize);
+    cube.castShadow = true;
+    cube.receiveShadow = true;
+    
+    scene.add(cube);
+    blocks.set(`${x},${y},${z}`, cube);
+}
+
+// Remover bloco
+function removeBlock(x, y, z) {
+    const key = `${Math.floor(x)},${Math.floor(y)},${Math.floor(z)}`;
+    const block = blocks.get(key);
+    if (block) {
+        scene.remove(block);
+        blocks.delete(key);
+    }
+}
+
+// Colocar bloco
+function placeBlock(x, y, z) {
+    const key = `${Math.floor(x)},${Math.floor(y)},${Math.floor(z)}`;
+    if (!blocks.has(key)) {
+        createBlock(Math.floor(x), Math.floor(y), Math.floor(z), 'grass');
+    }
+}
+
+// ========================== CONTROLES ==========================
+let move = { forward: false, backward: false, left: false, right: false, jump: false };
+let velocity = new THREE.Vector3();
+let canJump = true;
+
+document.addEventListener('keydown', e => {
+    switch(e.code) {
+        case 'KeyW': move.forward = true; break;
+        case 'KeyS': move.backward = true; break;
+        case 'KeyA': move.left = true; break;
+        case 'KeyD': move.right = true; break;
+        case 'Space': if(canJump) { velocity.y = 12; canJump = false; } break;
+    }
+});
+
+document.addEventListener('keyup', e => {
+    switch(e.code) {
+        case 'KeyW': move.forward = false; break;
+        case 'KeyS': move.backward = false; break;
+        case 'KeyA': move.left = false; break;
+        case 'KeyD': move.right = false; break;
+    }
+});
+
+// Mouse look (pointer lock)
+let yaw = 0, pitch = 0;
+const sensitivity = 0.002;
+
+document.addEventListener('click', () => {
+    renderer.domElement.requestPointerLock();
+});
+
+document.addEventListener('mousemove', e => {
+    if (document.pointerLockElement) {
+        yaw -= e.movementX * sensitivity;
+        pitch -= e.movementY * sensitivity;
+        pitch = Math.max(-Math.PI/2, Math.min(Math.PI/2, pitch));
+        
+        camera.rotation.order = 'YXZ';
+        camera.rotation.set(pitch, yaw, 0);
+    }
+});
+
+// Clique para quebrar/colocar
+renderer.domElement.addEventListener('mousedown', e => {
+    if (!document.pointerLockElement) return;
+    
+    const raycaster = new THREE.Raycaster();
+    raycaster.setFromCamera(new THREE.Vector2(0,0), camera);
+    
+    const intersects = raycaster.intersectObjects(Array.from(blocks.values()));
+    
+    if (intersects.length > 0) {
+        const intersect = intersects[0];
+        const pos = intersect.point;
+        
+        if (e.button === 0) { // esquerdo = remover
+            removeBlock(pos.x - intersect.face.normal.x*0.5, 
+                        pos.y - intersect.face.normal.y*0.5, 
+                        pos.z - intersect.face.normal.z*0.5);
+        } 
+        else if (e.button === 2) { // direito = colocar
+            const placePos = intersect.point.add(intersect.face.normal.multiplyScalar(0.5));
+            placeBlock(placePos.x, placePos.y, placePos.z);
         }
+    }
+});
 
-        // Função para detectar colisão do tiro com o chefe
-        function detectBulletHit(bullet) {
-            const enemyRect = enemy.getBoundingClientRect();
-            const bulletRect = bullet.getBoundingClientRect();
+// Prevenir menu do botão direito
+document.addEventListener('contextmenu', e => e.preventDefault());
 
-            if (
-                bulletRect.top < enemyRect.bottom &&
-                bulletRect.bottom > enemyRect.top &&
-                bulletRect.left < enemyRect.right &&
-                bulletRect.right > enemyRect.left
-            ) {
-                enemyLife -= 10;
-                enemyHealth.style.width = enemyLife + "%";
-                bullet.remove();
+// ========================== FÍSICA E MOVIMENTO ==========================
+camera.position.set(0, 15, 30);
 
-                if (enemyLife <= 0) {
-                    alert("Você derrotou o chefe!");
-                    resetGame();
-                }
-            }
-        }
+function updateMovement(delta) {
+    const speed = 20 * delta;
+    const direction = new THREE.Vector3();
+    
+    if (move.forward) direction.z -= 1;
+    if (move.backward) direction.z += 1;
+    if (move.left) direction.x -= 1;
+    if (move.right) direction.x += 1;
+    
+    direction.normalize();
+    
+    // Rotacionar direção conforme a câmera
+    direction.applyQuaternion(camera.quaternion);
+    direction.y = 0; // não voar
+    direction.normalize();
+    
+    velocity.x = direction.x * speed * 10;
+    velocity.z = direction.z * speed * 10;
+    
+    // Gravidade
+    velocity.y -= 30 * delta;
+    
+    camera.position.x += velocity.x * delta;
+    camera.position.z += velocity.z * delta;
+    camera.position.y += velocity.y * delta;
+    
+    // Colisão simples com o chão
+    if (camera.position.y < 8) {
+        camera.position.y = 8;
+        velocity.y = 0;
+        canJump = true;
+    }
+}
 
-        // Função para reiniciar o jogo
-        function resetGame() {
-            playerPositionX = 50;
-            playerPositionY = 80;
-            enemyLife = 100;
-            enemyHealth.style.width = "100%";
-            updatePlayerPosition();
-        }
+// ========================== ANIMAÇÃO ==========================
+const clock = new THREE.Clock();
 
-        // Movimentação do Chefe
-        function moveEnemy() {
-            let enemyPositionX = Math.random() * 100;
-            let enemyPositionY = Math.random() * 80;
-            enemy.style.left = enemyPositionX + "%";
-            enemy.style.top = enemyPositionY + "%";
-        }
+function animate() {
+    requestAnimationFrame(animate);
+    const delta = clock.getDelta();
+    
+    updateMovement(delta);
+    renderer.render(scene, camera);
+}
 
-        setInterval(moveEnemy, 3000); // O chefe se move a cada 3 segundos
-    </script>
+window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// Iniciar
+generateWorld();
+animate();
+
+alert("Clique na tela para ativar o mouse!\n\nControles:\nWASD - mover\nMouse - olhar\nEspaço - pular\nClique esquerdo - quebrar\nClique direito - colocar grama");
+</script>
 </body>
 </html>
