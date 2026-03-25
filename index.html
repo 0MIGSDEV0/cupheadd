@@ -10,13 +10,23 @@
         position: absolute; top: 10px; left: 10px; color: white; z-index: 100;
         background: rgba(0,0,0,0.7); padding: 12px 18px; border-radius: 10px; font-size: 18px;
     }
-    #gameOver {
+    #gameOver, #victory {
         position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
         background: rgba(20,0,0,0.95); color: #ff6666; padding: 40px; border-radius: 20px;
         text-align: center; display: none; border: 4px solid #aa0000;
     }
-    button { padding: 12px 30px; font-size: 20px; background:#aa0000; color:white; border:none; border-radius:8px; cursor:pointer; }
+    #victory {
+        background: rgba(0,20,0,0.95); 
+        color: #66ff66; 
+        border: 4px solid #00aa00;
+    }
+    button { 
+        padding: 12px 30px; font-size: 20px; background:#aa0000; color:white; 
+        border:none; border-radius:8px; cursor:pointer; margin-top: 15px;
+    }
     button:hover { background:#ff0000; }
+    #victory button { background:#00aa00; }
+    #victory button:hover { background:#00ff00; }
 </style>
 </head>
 <body>
@@ -30,16 +40,28 @@
     </small>
 </div>
 <canvas id="game" width="800" height="600"></canvas>
+
+<!-- Game Over -->
 <div id="gameOver">
     <h1>GAME OVER</h1>
     <p>Score final: <span id="finalScore">0</span></p>
     <button onclick="location.reload()">Jogar Novamente</button>
 </div>
+
+<!-- Victory Screen -->
+<div id="victory">
+    <h1>🎉 VITÓRIA! 🎉</h1>
+    <p>Você derrotou o Boss!</p>
+    <p>Score final: <span id="victoryScore">0</span></p>
+    <button onclick="location.reload()">Jogar Novamente</button>
+</div>
+
 <script>
 // ====================== SETUP ======================
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 const W = 800, H = 600;
+
 let player = { x: W/2, y: H/2, size: 28, speed: 4.2, health: 3, invincible: 0 };
 let keys = {};
 let mouse = { x: W/2, y: H/2, down: false };
@@ -97,7 +119,7 @@ function createParticles(x, y, color, count) {
     }
 }
 
-// ====================== INIMIGOS (AMARELO) ======================
+// ====================== INIMIGOS NORMAIS (vermelho) ======================
 function spawnEnemy() {
     if (enemies.length > 9 || bossSpawned) return;
    
@@ -109,12 +131,12 @@ function spawnEnemy() {
         size: 26,
         speed: 1.7 + Math.random() * 0.6,
         health: 3,
-        color: '#f8c030',     // ← Amarelo (como o seu sprite)
+        color: '#c22',
         isBoss: false
     });
 }
 
-// ====================== BOSS (ROXO) ======================
+// ====================== BOSS (preto com olhos vermelhos) ======================
 function spawnBoss() {
     if (bossSpawned) return;
     bossSpawned = true;
@@ -124,10 +146,10 @@ function spawnBoss() {
         size: 68,
         speed: 1.1,
         health: 45,
-        color: '#8b00ff',     // ← Roxo escuro (como o seu sprite)
+        color: '#111111',   // Preto
         isBoss: true
     });
-    createParticles(W/2, 120, '#c060ff', 60);
+    createParticles(W/2, 120, '#ff0000', 60);
 }
 
 // ====================== LOOP ======================
@@ -135,7 +157,6 @@ const clock = { last: Date.now() };
 function gameLoop() {
     if (!gameRunning) return;
     const now = Date.now();
-    const delta = (now - clock.last) / 16;
     clock.last = now;
 
     // Fundo
@@ -214,22 +235,22 @@ function gameLoop() {
         e.x += (dx / dist) * e.speed;
         e.y += (dy / dist) * e.speed;
 
-        // Desenho do inimigo
+        // Desenho
         ctx.fillStyle = e.color;
         ctx.beginPath();
         ctx.arc(e.x, e.y, e.size/2, 0, Math.PI*2);
         ctx.fill();
 
         if (e.isBoss) {
-            // Boss roxo - olhos mais assustadores
+            // Boss preto - olhos vermelhos
             ctx.fillStyle = '#fff';
-            ctx.fillRect(e.x-18, e.y-12, 12, 14);
-            ctx.fillRect(e.x+6, e.y-12, 12, 14);
-            ctx.fillStyle = '#00ffff';
-            ctx.fillRect(e.x-14, e.y-8, 5, 7);
-            ctx.fillRect(e.x+10, e.y-8, 5, 7);
+            ctx.fillRect(e.x-18, e.y-14, 14, 16);
+            ctx.fillRect(e.x+4, e.y-14, 14, 16);
+            ctx.fillStyle = '#ff0000';
+            ctx.fillRect(e.x-13, e.y-10, 6, 8);
+            ctx.fillRect(e.x+9, e.y-10, 6, 8);
         } else {
-            // Inimigos amarelos - olhos normais
+            // Inimigos normais
             ctx.fillStyle = '#fff';
             ctx.fillRect(e.x-8, e.y-6, 6, 8);
             ctx.fillRect(e.x+2, e.y-6, 6, 8);
@@ -247,13 +268,20 @@ function gameLoop() {
                 createParticles(b.x, b.y, '#ffaaaa', 12);
                
                 if (e.health <= 0) {
-                    createParticles(e.x, e.y, e.isBoss ? '#c060ff' : '#ffdd44', e.isBoss ? 80 : 35);
+                    createParticles(e.x, e.y, e.isBoss ? '#440000' : '#aa0000', e.isBoss ? 90 : 35);
                     enemies.splice(i, 1);
-                    score += e.isBoss ? 300 : 20;
+                    score += e.isBoss ? 500 : 20;
                     killCount++;
                     document.getElementById('kills').textContent = killCount;
 
-                    if (killCount >= 30 && !bossSpawned) {
+                    // Vitória ao matar o Boss
+                    if (e.isBoss) {
+                        gameRunning = false;
+                        document.getElementById('victoryScore').textContent = score;
+                        document.getElementById('victory').style.display = 'block';
+                    }
+                    // Spawn do Boss aos 30 kills
+                    else if (killCount >= 30 && !bossSpawned) {
                         spawnBoss();
                     }
                     break;
@@ -262,7 +290,7 @@ function gameLoop() {
         }
 
         // Colisão jogador × inimigo
-        if (player.invincible <= 0 && Math.hypot(player.x - e.x, player.y - e.y) < (e.isBoss ? 45 : 25)) {
+        if (player.invincible <= 0 && Math.hypot(player.x - e.x, player.y - e.y) < (e.isBoss ? 48 : 25)) {
             player.health -= e.isBoss ? 2 : 1;
             player.invincible = 60;
             createParticles(player.x, player.y, '#ff0000', 25);
@@ -278,7 +306,7 @@ function gameLoop() {
 
     if (player.invincible > 0) player.invincible--;
 
-    // Spawn de inimigos amarelos
+    // Spawn de inimigos
     if (!bossSpawned && Math.random() < 0.045) spawnEnemy();
 
     // Partículas
@@ -301,11 +329,11 @@ function gameLoop() {
     requestAnimationFrame(gameLoop);
 }
 
-// Iniciar jogo
+// Iniciar
 for (let i = 0; i < 4; i++) spawnEnemy();
 gameLoop();
 
-alert("The Binding of Isaac - Versão com Boss!\n\nInimigos agora são amarelos!\nBoss agora é roxo!\nChegue a 30 kills para invocar o Boss Gigante!\n\nBoa sorte! 🔥");
+alert("The Binding of Isaac\n\nChegue a 30 kills para invocar o Boss Preto!\nDerrote ele para vencer o jogo!\n\nBoa sorte! 🔥");
 </script>
 </body>
 </html>
